@@ -28,11 +28,8 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
-def main():
+def main(src_dir,generated_images_dir,dlatent_dir ):
     parser = argparse.ArgumentParser(description='Find latent representation of reference images using perceptual losses', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('src_dir', help='Directory with images for encoding')
-    parser.add_argument('generated_images_dir', help='Directory for storing generated images')
-    parser.add_argument('dlatent_dir', help='Directory for storing dlatent representations')
     parser.add_argument('--data_dir', default='data', help='Directory for storing optional models')
     parser.add_argument('--mask_dir', default='masks', help='Directory for storing optional masks')
     parser.add_argument('--load_last', default='', help='Start with embeddings from directory')
@@ -40,23 +37,23 @@ def main():
     parser.add_argument('--model_url', default='https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ', help='Fetch a StyleGAN model to train on from this URL') # karras2019stylegan-ffhq-1024x1024.pkl
     parser.add_argument('--model_res', default=1024, help='The dimension of images in the StyleGAN model', type=int)
     parser.add_argument('--batch_size', default=1, help='Batch size for generator and perceptual model', type=int)
-    parser.add_argument('--optimizer', default='ggt', help='Optimization algorithm used for optimizing dlatents')
+    parser.add_argument('--optimizer', default='adam', help='Optimization algorithm used for optimizing dlatents')
 
     # Perceptual model params
     parser.add_argument('--image_size', default=256, help='Size of images for perceptual model', type=int)
     parser.add_argument('--resnet_image_size', default=256, help='Size of images for the Resnet model', type=int)
-    parser.add_argument('--lr', default=0.25, help='Learning rate for perceptual model', type=float)
-    parser.add_argument('--decay_rate', default=0.9, help='Decay rate for learning rate', type=float)
-    parser.add_argument('--iterations', default=100, help='Number of optimization steps for each batch', type=int)
-    parser.add_argument('--decay_steps', default=4, help='Decay steps for learning rate decay (as a percent of iterations)', type=float)
+    parser.add_argument('--lr', default=0.02, help='Learning rate for perceptual model', type=float)
+    parser.add_argument('--decay_rate', default=0.95, help='Decay rate for learning rate', type=float)
+    parser.add_argument('--iterations', default=400, help='Number of optimization steps for each batch', type=int)
+    parser.add_argument('--decay_steps', default=6, help='Decay steps for learning rate decay (as a percent of iterations)', type=float)
     parser.add_argument('--early_stopping', default=True, help='Stop early once training stabilizes', type=str2bool, nargs='?', const=True)
-    parser.add_argument('--early_stopping_threshold', default=0.5, help='Stop after this threshold has been reached', type=float)
+    parser.add_argument('--early_stopping_threshold', default=0.05, help='Stop after this threshold has been reached', type=float)
     parser.add_argument('--early_stopping_patience', default=10, help='Number of iterations to wait below threshold', type=int)    
     parser.add_argument('--load_effnet', default='data/finetuned_effnet.h5', help='Model to load for EfficientNet approximation of dlatents')
     parser.add_argument('--load_resnet', default='data/finetuned_resnet.h5', help='Model to load for ResNet approximation of dlatents')
     parser.add_argument('--use_preprocess_input', default=True, help='Call process_input() first before using feed forward net', type=str2bool, nargs='?', const=True)
     parser.add_argument('--use_best_loss', default=True, help='Output the lowest loss value found as the solution', type=str2bool, nargs='?', const=True)
-    parser.add_argument('--average_best_loss', default=0.25, help='Do a running weighted average with the previous best dlatents found', type=float)
+    parser.add_argument('--average_best_loss', default=0.5, help='Do a running weighted average with the previous best dlatents found', type=float)
     parser.add_argument('--sharpen_input', default=True, help='Sharpen the input images', type=str2bool, nargs='?', const=True)
 
     # Loss function options
@@ -64,9 +61,9 @@ def main():
     parser.add_argument('--use_vgg_layer', default=9, help='Pick which VGG layer to use.', type=int)
     parser.add_argument('--use_pixel_loss', default=1.5, help='Use logcosh image pixel loss; 0 to disable, > 0 to scale.', type=float)
     parser.add_argument('--use_mssim_loss', default=200, help='Use MS-SIM perceptual loss; 0 to disable, > 0 to scale.', type=float)
-    parser.add_argument('--use_lpips_loss', default=100, help='Use LPIPS perceptual loss; 0 to disable, > 0 to scale.', type=float)
-    parser.add_argument('--use_l1_penalty', default=0.5, help='Use L1 penalty on latents; 0 to disable, > 0 to scale.', type=float)
-    parser.add_argument('--use_discriminator_loss', default=0.5, help='Use trained discriminator to evaluate realism.', type=float)
+    parser.add_argument('--use_lpips_loss', default=0, help='Use LPIPS perceptual loss; 0 to disable, > 0 to scale.', type=float)
+    parser.add_argument('--use_l1_penalty', default=0.3, help='Use L1 penalty on latents; 0 to disable, > 0 to scale.', type=float)
+    parser.add_argument('--use_discriminator_loss', default=0, help='Use trained discriminator to evaluate realism.', type=float)
     parser.add_argument('--use_adaptive_loss', default=False, help='Use the adaptive robust loss function from Google Research for pixel and VGG feature loss.', type=str2bool, nargs='?', const=True)
 
     # Generator params
@@ -84,7 +81,7 @@ def main():
 
     # Video params
     parser.add_argument('--video_dir', default='videos', help='Directory for storing training videos')
-    parser.add_argument('--output_video', default=False, help='Generate videos of the optimization process', type=bool)
+    parser.add_argument('--output_video', default=True, help='Generate videos of the optimization process', type=bool)
     parser.add_argument('--video_codec', default='MJPG', help='FOURCC-supported video codec name')
     parser.add_argument('--video_frame_rate', default=24, help='Video frames per second', type=int)
     parser.add_argument('--video_size', default=512, help='Video size in pixels', type=int)
@@ -98,16 +95,16 @@ def main():
       import cv2
       synthesis_kwargs = dict(output_transform=dict(func=tflib.convert_images_to_uint8, nchw_to_nhwc=False), minibatch_size=args.batch_size)
 
-    ref_images = [os.path.join(args.src_dir, x) for x in os.listdir(args.src_dir)]
+    ref_images = [os.path.join(src_dir, x) for x in os.listdir(src_dir)]
     ref_images = list(filter(os.path.isfile, ref_images))
 
     if len(ref_images) == 0:
-        raise Exception('%s is empty' % args.src_dir)
+        raise Exception('%s is empty' % src_dir)
 
     os.makedirs(args.data_dir, exist_ok=True)
     os.makedirs(args.mask_dir, exist_ok=True)
-    os.makedirs(args.generated_images_dir, exist_ok=True)
-    os.makedirs(args.dlatent_dir, exist_ok=True)
+    os.makedirs(generated_images_dir, exist_ok=True)
+    os.makedirs(dlatent_dir, exist_ok=True)
     os.makedirs(args.video_dir, exist_ok=True)
 
     # Initialize generator and perceptual model
@@ -231,8 +228,8 @@ def main():
                 img_array = img_array.astype(np.uint8)
                 #img_array = np.where(mask, np.array(img_array), orig_img)
             img = PIL.Image.fromarray(img_array, 'RGB')
-            img.save(os.path.join(args.generated_images_dir, f'{img_name}.png'), 'PNG')
-            np.save(os.path.join(args.dlatent_dir, f'{img_name}.npy'), dlatent)
+            img.save(os.path.join(generated_images_dir, f'{img_name}.png'), 'PNG')
+            np.save(os.path.join(dlatent_dir, f'{img_name}.npy'), dlatent)
 
         generator.reset_dlatents()
 
