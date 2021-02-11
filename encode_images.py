@@ -81,7 +81,7 @@ def main(src_dir,generated_images_dir,dlatent_dir ):
 
     # Video params
     parser.add_argument('--video_dir', default='videos', help='Directory for storing training videos')
-    parser.add_argument('--output_video', default=True, help='Generate videos of the optimization process', type=bool)
+    parser.add_argument('--output_video', default=False, help='Generate videos of the optimization process', type=bool)
     parser.add_argument('--video_codec', default='MJPG', help='FOURCC-supported video codec name')
     parser.add_argument('--video_frame_rate', default=24, help='Video frames per second', type=int)
     parser.add_argument('--video_size', default=512, help='Video size in pixels', type=int)
